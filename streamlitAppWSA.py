@@ -97,7 +97,7 @@ lq, uq = lower_perc / 100, upper_perc / 100
 if mode_selektion:
     cat_choice = st.sidebar.radio("Kategorie", ["Juniors", "Elite"], horizontal=True)
 else:
-    min_age, max_age = 10, int(DATA["age"].max())
+    min_age, max_age = 14, int(DATA["age"].max())
     age_selected = st.sidebar.slider("Alter (Jahre)", min_age, max_age, min_age)
 
 with st.sidebar.expander("Y‑Achse einstellen"):
