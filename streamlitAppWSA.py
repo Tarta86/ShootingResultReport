@@ -11,35 +11,43 @@ st.set_page_config(page_title="Selektionskonzept-Tool", layout="wide")
 # 1) Pfade ---------------------------------------------------------------------
 BASE_DIR = Path(__file__).parent
 DEFAULT_FILE = BASE_DIR / "data" / "data.xlsx"
-LOGO_FILE   = BASE_DIR / "assets" / "swiss_shooting_logo.png"  # <--- Logo hier ablegen
+LOGO_FILE   = BASE_DIR / "assets" / "swiss_shooting_logo.png"  # Logo-Datei
 
 # -----------------------------------------------------------------------------
 # 2) Daten laden ---------------------------------------------------------------
 @st.cache_data(show_spinner="📊 Lade Daten …")
 def load_and_prepare(filepath: Path) -> pd.DataFrame:
     if not filepath.exists():
-        st.error(f"Excel-Datei nicht gefunden: {filepath}\n➜ Lege sie in `data/data.xlsx`. ")
+        st.error(f"Excel-Datei nicht gefunden: {filepath}\n➜ Lege sie in `data/data.xlsx`.")
         st.stop()
+
     df = pd.read_excel(filepath)
     df = df[df["issfID"].astype(str).str.len() == 16]
+
     def birth_year_from_issfID(issf_id):
         try:
             return datetime.datetime.strptime(str(issf_id)[6:14], "%d%m%Y").year
         except ValueError:
             return None
+
     df["birth_year"] = df["issfID"].apply(birth_year_from_issfID)
     df = df.dropna(subset=["birth_year"])
     df["age"] = df["Year"] - df["birth_year"]
     df = df[df["age"] > 9]
     df["category"] = np.where(df["age"] > 21, "Elite", "Juniors")
+
     current_year = datetime.datetime.now().year
     df = df[df["Year"] > current_year - 11]
-    repl = {"Center Fire": "25m Center Fire Pistol Open",
-            "25m Standard Pistol": "25m Standard Pistol Open",
-            "50m Pistol ": "50m Pistol Open",
-            "50m Rifle Prone ": "50m Rifle Prone Open"}
+
+    repl = {
+        "Center Fire": "25m Center Fire Pistol Open",
+        "25m Standard Pistol": "25m Standard Pistol Open",
+        "50m Pistol ": "50m Pistol Open",
+        "50m Rifle Prone ": "50m Rifle Prone Open",
+    }
     for k, v in repl.items():
         df.loc[df["discipline"].str.contains(k, case=False), "discipline"] = v
+
     return df
 
 DATA = load_and_prepare(DEFAULT_FILE)
@@ -48,7 +56,9 @@ DATA = load_and_prepare(DEFAULT_FILE)
 # 3) Scoring-Funktionen ---------------------------------------------------------
 
 def quantile_score(df: pd.DataFrame, user_result: float):
-    return None if df.empty else (df["result"].le(user_result).sum() / len(df)) * 100
+    if df.empty:
+        return None
+    return (df["result"].le(user_result).sum() / len(df)) * 100
 
 def range_score(df: pd.DataFrame, user_result: float, lq: float, uq: float):
     if df.empty:
@@ -61,7 +71,8 @@ def range_score(df: pd.DataFrame, user_result: float, lq: float, uq: float):
 def all_qscores(df: pd.DataFrame):
     if df.empty:
         return []
-    res = df["result"].values; n = len(res)
+    res = df["result"].values
+    n = len(res)
     return [((res <= r).sum() / n) * 100 for r in res]
 
 # -----------------------------------------------------------------------------
@@ -75,7 +86,7 @@ age_selected = st.sidebar.slider("Alter (Jahre)", min_value=min_age, max_value=m
 
 st.sidebar.markdown("**Unteres / Oberes Quantil (%)**")
 lower_perc, upper_perc = st.sidebar.slider("Bereich", 0.0, 100.0, (50.0, 97.5))
-lq, uq = lower_perc/100, upper_perc/100
+lq, uq = lower_perc / 100, upper_perc / 100
 
 with st.sidebar.expander("Y-Achse einstellen"):
     y_min = st.number_input("Y-Min", value=None, step=1.0, format="%0.1f", key="ymin")
@@ -89,7 +100,7 @@ with title_col:
     st.title("🎯 Selektionskonzept-Tool")
 with logo_col:
     if LOGO_FILE.exists():
-        st.image(str(LOGO_FILE), use_column_width="auto")
+        st.image(str(LOGO_FILE), use_container_width=True)
     else:
         st.markdown("<small>Logo fehlt (assets/swiss_shooting_logo.png)</small>", unsafe_allow_html=True)
 
@@ -102,6 +113,7 @@ if selected_disc is None:
 
 mask = (DATA["discipline"] == selected_disc) & (DATA["age"] == age_selected)
 df_disc = DATA[mask].copy()
+
 if df_disc.empty:
     st.error("Keine Daten für diese Auswahl gefunden.")
     st.stop()
@@ -119,25 +131,33 @@ col2.metric("Range-Score", "k.A." if r_score is None else f"{r_score:.2f} Punkte
 fig1, ax1 = plt.subplots(figsize=(5, 6))
 ax1.scatter(np.random.normal(1.0, 0.04, len(df_disc)), df_disc["result"], color="black", alpha=0.7)
 L, U = df_disc["result"].quantile(lq), df_disc["result"].quantile(uq)
-ax1.axhline(L, color="blue", linestyle="--"); ax1.axhline(U, color="blue", linestyle="--")
+ax1.axhline(L, color="blue", linestyle="--")
+ax1.axhline(U, color="blue", linestyle="--")
 ax1.scatter([1.0], [user_res], marker="x", color="red", s=100)
 ax1.set_xlim(0.8, 1.2)
-ax1.set_xlabel("Alle Schütz*innen"); ax1.set_ylabel("Resultat"); ax1.set_title("Swarm / Range Score")
+ax1.set_xlabel("Alle Schütz*innen")
+ax1.set_ylabel("Resultat")
+ax1.set_title("Swarm / Range Score")
 if y_min is not None and y_max is not None and y_min < y_max:
     ax1.set_ylim(y_min, y_max)
 else:
-    y0, y1 = ax1.get_ylim(); ax1.set_ylim(min(y0, user_res-5), max(y1, user_res+5))
+    y0, y1 = ax1.get_ylim(); ax1.set_ylim(min(y0, user_res - 5), max(y1, user_res + 5))
+
 st.pyplot(fig1, use_container_width=True)
 
 fig2, ax2 = plt.subplots(figsize=(5, 6))
 ax2.scatter(all_qscores(df_disc), df_disc["result"], color="black", alpha=0.7)
-ax2.axvline(q_score, color="red", linestyle="--"); ax2.scatter([q_score], [user_res], marker="x", color="red", s=100)
-ax2.set_xlabel("Quantil-Score (%)"); ax2.set_ylabel("Resultat"); ax2.set_title("Quantil / Result")
+ax2.axvline(q_score, color="red", linestyle="--")
+ax2.scatter([q_score], [user_res], marker="x", color="red", s=100)
+ax2.set_xlabel("Quantil-Score (%)")
+ax2.set_ylabel("Resultat")
+ax2.set_title("Quantil / Result")
 ax2.set_xlim(-5, 105)
 if y_min is not None and y_max is not None and y_min < y_max:
     ax2.set_ylim(y_min, y_max)
 else:
-    y0, y1 = ax2.get_ylim(); ax2.set_ylim(min(y0, user_res-5), max(y1, user_res+5))
+    y0, y1 = ax2.get_ylim(); ax2.set_ylim(min(y0, user_res - 5), max(y1, user_res + 5))
+
 st.pyplot(fig2, use_container_width=True)
 
 # -----------------------------------------------------------------------------
