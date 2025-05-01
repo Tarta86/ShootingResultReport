@@ -53,12 +53,10 @@ def load_and_prepare(filepath: Path) -> pd.DataFrame:
 DATA = load_and_prepare(DEFAULT_FILE)
 
 # -----------------------------------------------------------------------------
-# 3) Scoring-Funktionen ---------------------------------------------------------
+# 3) Scoring‑Funktionen ---------------------------------------------------------
 
 def quantile_score(df: pd.DataFrame, user_result: float):
-    if df.empty:
-        return None
-    return (df["result"].le(user_result).sum() / len(df)) * 100
+    return None if df.empty else (df["result"].le(user_result).sum() / len(df)) * 100
 
 def range_score(df: pd.DataFrame, user_result: float, lq: float, uq: float):
     if df.empty:
@@ -71,17 +69,19 @@ def range_score(df: pd.DataFrame, user_result: float, lq: float, uq: float):
 def all_qscores(df: pd.DataFrame):
     if df.empty:
         return []
-    res = df["result"].values
-    n = len(res)
+    res = df["result"].values; n = len(res)
     return [((res <= r).sum() / n) * 100 for r in res]
 
 # -----------------------------------------------------------------------------
 # 4) Sidebar -------------------------------------------------------------------
 
 st.sidebar.header("⚙️ Einstellungen")
-selected_disc = st.sidebar.selectbox("Disziplin", sorted(DATA["discipline"].unique()), index=None, placeholder="Bitte wählen …")
+selected_disc = st.sidebar.selectbox(
+    "Disziplin", sorted(DATA["discipline"].unique()), index=None, placeholder="Bitte wählen …")
+
 user_res = st.sidebar.number_input("Eigenes Resultat", min_value=0.0, step=1.0, format="%0.1f")
-min_age, max_age = int(DATA["age"].min()), int(DATA["age"].max())
+
+min_age, max_age = 10, int(DATA["age"].max())
 age_selected = st.sidebar.slider("Alter (Jahre)", min_value=min_age, max_value=max_age, value=min_age, step=1)
 
 st.sidebar.markdown("**Unteres / Oberes Quantil (%)**")
@@ -105,13 +105,19 @@ with logo_col:
         st.markdown("<small>Logo fehlt (assets/swiss_shooting_logo.png)</small>", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 6) Daten‑Filter --------------------------------------------------------------
+# 6) Daten‑Filter gemäß Junior/Elite‑Logik -------------------------------------
 
 if selected_disc is None:
     st.info("Bitte links eine Disziplin auswählen.")
     st.stop()
 
-mask = (DATA["discipline"] == selected_disc) & (DATA["age"] == age_selected)
+if age_selected <= 21:
+    # Junioren: exaktes Alter
+    mask = (DATA["discipline"] == selected_disc) & (DATA["age"] == age_selected)
+else:
+    # Elite: alle 22+ bündeln
+    mask = (DATA["discipline"] == selected_disc) & (DATA["age"] >= 22)
+
 df_disc = DATA[mask].copy()
 
 if df_disc.empty:
@@ -131,32 +137,26 @@ col2.metric("Range-Score", "k.A." if r_score is None else f"{r_score:.2f} Punkte
 fig1, ax1 = plt.subplots(figsize=(5, 6))
 ax1.scatter(np.random.normal(1.0, 0.04, len(df_disc)), df_disc["result"], color="black", alpha=0.7)
 L, U = df_disc["result"].quantile(lq), df_disc["result"].quantile(uq)
-ax1.axhline(L, color="blue", linestyle="--")
-ax1.axhline(U, color="blue", linestyle="--")
+ax1.axhline(L, color="blue", linestyle="--"); ax1.axhline(U, color="blue", linestyle="--")
 ax1.scatter([1.0], [user_res], marker="x", color="red", s=100)
 ax1.set_xlim(0.8, 1.2)
-ax1.set_xlabel("Alle Schütz*innen")
-ax1.set_ylabel("Resultat")
-ax1.set_title("Swarm / Range Score")
+ax1.set_xlabel("Alle Schütz*innen"); ax1.set_ylabel("Resultat"); ax1.set_title("Swarm / Range Score")
 if y_min is not None and y_max is not None and y_min < y_max:
     ax1.set_ylim(y_min, y_max)
 else:
-    y0, y1 = ax1.get_ylim(); ax1.set_ylim(min(y0, user_res - 5), max(y1, user_res + 5))
+    y0, y1 = ax1.get_ylim(); ax1.set_ylim(min(y0, user_res-5), max(y1, user_res+5))
 
 st.pyplot(fig1, use_container_width=True)
 
 fig2, ax2 = plt.subplots(figsize=(5, 6))
 ax2.scatter(all_qscores(df_disc), df_disc["result"], color="black", alpha=0.7)
-ax2.axvline(q_score, color="red", linestyle="--")
-ax2.scatter([q_score], [user_res], marker="x", color="red", s=100)
-ax2.set_xlabel("Quantil-Score (%)")
-ax2.set_ylabel("Resultat")
-ax2.set_title("Quantil / Result")
+ax2.axvline(q_score, color="red", linestyle="--"); ax2.scatter([q_score], [user_res], marker="x", color="red", s=100)
+ax2.set_xlabel("Quantil-Score (%)"); ax2.set_ylabel("Resultat"); ax2.set_title("Quantil / Result")
 ax2.set_xlim(-5, 105)
 if y_min is not None and y_max is not None and y_min < y_max:
     ax2.set_ylim(y_min, y_max)
 else:
-    y0, y1 = ax2.get_ylim(); ax2.set_ylim(min(y0, user_res - 5), max(y1, user_res + 5))
+    y0, y1 = ax2.get_ylim(); ax2.set_ylim(min(y0, user_res-5), max(y1, user_res+5))
 
 st.pyplot(fig2, use_container_width=True)
 
