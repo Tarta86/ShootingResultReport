@@ -130,7 +130,7 @@ else:
         mask = (DATA["discipline"] == selected_disc) & (DATA["age"] >= ELITE_MIN)
 
 df_disc = DATA[mask].copy()
-if df_disc.empty():
+if df_disc.empty:
     st.error("Keine Daten für diese Auswahl gefunden."); st.stop()
 
 q_score = quantile_score(df_disc, user_res)
